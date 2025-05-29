@@ -1,0 +1,130 @@
+#!/bin/bash
+
+IP=$(curl -sS ipv4.icanhazip.com)
+ISP=$(cat /etc/xray/isp)
+CITY=$(cat /etc/xray/city)
+domain=$(cat /etc/xray/domain)
+
+# . Liner 
+function baris_panjang() {
+  echo -e " ——————————————————————————————————————"
+}
+
+read -p " Username      : " Login
+read -p " Password      : " Pass
+read -p " Limit (IP)    : " iplimit
+read -p " Expired (day) : " masaaktif
+
+
+
+#limitip
+if [[ $iplimit -gt 0 ]]; then
+mkdir -p /etc/kyt/limit/ssh/ip/
+echo -e "$iplimit" > /etc/kyt/limit/ssh/ip/$Login
+else
+echo > /dev/null
+fi
+
+
+tgl=$(date -d "$masaaktif days" +"%d")
+bln=$(date -d "$masaaktif days" +"%b")
+thn=$(date -d "$masaaktif days" +"%Y")
+expe="$tgl $bln, $thn"
+tgl2=$(date +"%d")
+bln2=$(date +"%b")
+thn2=$(date +"%Y")
+tnggl="$tgl2 $bln2, $thn2"
+useradd -e `date -d "$masaaktif days" +"%Y-%m-%d"` -s /bin/false -M $Login
+expi="$(chage -l $Login | grep "Account expires" | awk -F": " '{print $2}')"
+echo -e "$Pass\n$Pass\n"|passwd $Login &> /dev/null
+hariini=`date -d "0 days" +"%Y-%m-%d"`
+expi=`date -d "$masaaktif days" +"%Y-%m-%d"`
+
+if [ ! -e /etc/ssh ]; then
+  mkdir -p /etc/ssh
+fi
+
+if [ -z ${Quota} ]; then
+  Quota="0"
+fi
+
+c=$(echo "${Quota}" | sed 's/[^0-9]*//g')
+d=$((${c} * 1024 * 1024 * 1024))
+
+if [[ ${c} != "0" ]]; then
+  echo "${d}" >/etc/ssh/${Login}
+fi
+DATADB=$(cat /etc/ssh/.ssh.db | grep "^#ssh#" | grep -w "${Login}" | awk '{print $2}')
+if [[ "${DATADB}" != '' ]]; then
+  sed -i "/\b${Login}\b/d" /etc/ssh/.ssh.db
+fi
+echo "#ssh# ${Login} ${Pass} ${Quota} ${iplimit} ${expe}" >>/etc/ssh/.ssh.db
+
+
+cat > /var/www/html/ssh-$Login.txt <<-END
+———————————————————————————————————————
+
+Format SSH OVPN Account
+———————————————————————————————————————
+Username         : $Login
+Password         : $Pass
+———————————————————————————————————————
+IP               : $IP
+Host             : $domain
+Port OpenSSH     : 443, 80, 22
+Port Dropbear    : 443, 109
+Port Dropbear WS : 443, 109
+Port SSH UDP     : 1-65535
+Port SSH WS      : 80,8080,2082,2095
+Port SSH SSL WS  : 443
+Port SSL/TLS     : 443-8443
+Port OVPN WS SSL : 443
+Port OVPN UDP    : 2200
+———————————————————————————————————————
+Aktif Selama     : $masaaktif Hari
+Dibuat Pada      : $tnggl
+Berakhir Pada    : $expe
+———————————————————————————————————————
+Payload WSS      : GET wss://BUG.COM/ HTTP/1.1[crlf]Host: $domain[crlf]Upgrade: websocket[crlf][crlf] 
+———————————————————————————————————————
+OVPN Download    : https://$domain:81/
+———————————————————————————————————————
+
+END
+
+PAYLOADWS="GET / HTTP/1.1[crlf]Host: [host][crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf][crlf]"
+
+PAYLOADTLS="GET wss://$domain/ HTTP/1.1[crlf]Host: [host][crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf][crlf]"
+
+PAYLOADHANCED="HEAD / HTTP/1.1[crlf]Host: Masukan_Bug[crlf][crlf]PATCH / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf][split]HTTP/ 1[crlf][crlf]"
+
+baris_panjang
+echo -e "  SSH OPENVPN"
+echo ""
+echo -e " Remark      : $Login"
+echo -e " Password    : $Pass"
+echo -e " Limit Ip    : ${iplimit} Devic"
+echo -e " Domain      : $domain"
+echo -e " ISP         : $ISP "
+echo -e " OpenSSH     : 443, 80, 22"
+echo -e " Port UDP    : 1-65535"
+echo -e " SSH WS      : 80,8080,8880,2082"
+echo -e " SSL/TLS     : 443"
+echo -e " OVPN UDP    : 2200"
+baris_panjang
+echo -e " Port 80 : $domain:80@$Login:$Pass"
+echo -e " Port 443 : $domain:443@$Login:$Pass"
+echo -e " Udp Custom : $domain:1-65535@$Login:$Pas"
+echo -e " OpenVpn : https://$domain:81/ "
+echo -e " Account : https://$domain:81/ssh-$Login.txt "
+baris_panjang
+echo -e " Payload WS  : $PAYLOADWS"
+baris_panjang
+echo -e " Payload TLS : $PAYLOADTLS"
+baris_panjang
+echo -e " Payload ENCD: $PAYLOADHANCED"
+baris_panjang
+echo -e " Expiry in : $masaaktif Day"
+
+rm -f $0
+exit 0
